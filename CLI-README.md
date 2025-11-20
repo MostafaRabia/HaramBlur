@@ -85,6 +85,39 @@ Safe content categories (not blurred):
 -   Node.js 14 or higher
 -   npm or yarn
 
+## Programmatic Usage
+
+You can also use HaramBlur as a module in your Node.js applications:
+
+```javascript
+const { detectImage, applyBlur } = require("./index.js");
+
+async function processImage(inputPath, outputPath) {
+    const settings = {
+        strictness: 0.5,
+        blurAmount: 20,
+    };
+
+    const result = await detectImage(inputPath, settings);
+
+    if (result.shouldBlur) {
+        await applyBlur(inputPath, outputPath, settings.blurAmount);
+    }
+
+    return result;
+}
+```
+
+See `example.js` for a complete example, and `batch-example.js` for batch processing multiple images.
+
+### Batch Processing
+
+Process multiple images in a directory:
+
+```bash
+node batch-example.js ./input-directory ./output-directory 0.5
+```
+
 ## Notes
 
 -   On first run, the tool will download the NSFW detection model (approximately 3MB)
