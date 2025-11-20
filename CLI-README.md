@@ -57,7 +57,7 @@ node index.js input.jpg output.jpg --strictness=0.5 --blur-amount=25
 
 ## How It Works
 
-The CLI tool uses **the exact same NSFW detection model and logic** as the browser extension to analyze images for inappropriate content. When detected, it applies a blur filter to the output image. The model is loaded from the local `src/assets/models/nsfwjs/` directory, ensuring 100% consistency with the extension's behavior.
+The CLI tool uses **the exact same NSFW detection model and logic** as the browser extension to analyze images for inappropriate content. When detected, it applies a blur filter to the output image. The model is loaded from the local `src/assets/models/nsfwjs/` directory, ensuring 100% consistency with the extension's NSFW detection behavior.
 
 ### Detection Categories
 
@@ -71,6 +71,16 @@ Safe content categories (not blurred):
 
 -   Neutral images
 -   Drawings/artwork (non-explicit)
+
+### Current Limitations
+
+**Note:** The CLI currently implements **NSFW detection only**. Face/gender detection (available in the browser extension) is not yet implemented due to technical constraints with the Human.js library in Node.js environments. This means:
+
+-   Images blurred by the extension due to **face detection** will NOT be blurred by the CLI
+-   Images blurred by the extension due to **NSFW content** WILL be blurred identically by the CLI
+-   The browser extension uses both NSFW and face detection; the CLI only uses NSFW detection
+
+To verify NSFW detection is working correctly, test with images containing NSFW content, not just faces.
 
 ## Features
 
