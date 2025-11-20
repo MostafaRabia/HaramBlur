@@ -16,10 +16,11 @@ global.HTMLImageElement = Image;
 global.ImageData = Canvas.ImageData || function () {};
 
 const tf = require("@tensorflow/tfjs");
-const nsfwjs = require("nsfwjs");
 
 const NSFW_CONFIG = {
     size: 224,
+    tfScalar: 255,
+    topK: 3,
 };
 
 // Default settings from constants.js
@@ -31,24 +32,58 @@ const DEFAULT_SETTINGS = {
     strictness: 0.5,
 };
 
-const containsNsfw = (nsfwDetections, strictness = 0.5) => {
+// Exact same logic as detector.js
+const getNsfwClasses = (factor = 0) => {
+    return {
+        0: {
+            className: "Drawing",
+            nsfw: false,
+            thresh: 0.5,
+        },
+        1: {
+            className: "Hentai",
+            nsfw: true,
+            thresh: 0.5 + (1 - factor) * 0.5,
+        },
+        2: {
+            className: "Neutral",
+            nsfw: false,
+            thresh: 0.5 + factor * 0.5,
+        },
+        3: {
+            className: "Porn",
+            nsfw: true,
+            thresh: 0.1 + (1 - factor) * 0.4,
+        },
+        4: {
+            className: "Sexy",
+            nsfw: true,
+            thresh: 0.1 + (1 - factor) * 0.4,
+        },
+    };
+};
+
+// Exact same logic as detector.js
+const containsNsfw = (nsfwDetections, strictness) => {
     if (!nsfwDetections?.length) return false;
+    let highestNsfwDelta = 0;
+    let highestSfwDelta = 0;
 
-    // nsfwjs returns: Porn, Sexy, Hentai, Neutral, Drawing
-    // We consider Porn, Sexy, and Hentai as NSFW
-    const nsfwCategories = ["Porn", "Sexy", "Hentai"];
-
-    for (const prediction of nsfwDetections) {
-        if (nsfwCategories.includes(prediction.className)) {
-            // Adjust threshold based on strictness (0 = more strict, 1 = less strict)
-            const threshold = 0.3 + strictness * 0.4; // ranges from 0.3 to 0.7
-            if (prediction.probability > threshold) {
-                return true;
-            }
+    const nsfwClasses = getNsfwClasses(strictness);
+    nsfwDetections.forEach((det) => {
+        if (nsfwClasses?.[det.id].nsfw) {
+            highestNsfwDelta = Math.max(
+                highestNsfwDelta,
+                det.probability - nsfwClasses[det.id].thresh
+            );
+        } else {
+            highestSfwDelta = Math.max(
+                highestSfwDelta,
+                det.probability - nsfwClasses[det.id].thresh
+            );
         }
-    }
-
-    return false;
+    });
+    return highestNsfwDelta > highestSfwDelta;
 };
 
 class Detector {
@@ -58,18 +93,128 @@ class Detector {
 
     async initNsfwModel() {
         console.log("Initializing NSFW model...");
-        // Load from nsfwjs default (hosted model)
-        // Note: For offline usage, you can implement a custom loader
-        this._nsfwModel = await nsfwjs.load();
+        // Load the exact same model as the extension
+        const modelJsonPath = path.join(
+            __dirname,
+            "src/assets/models/nsfwjs/model.json"
+        );
+        const modelDir = path.dirname(modelJsonPath);
+        
+        if (!fs.existsSync(modelJsonPath)) {
+            throw new Error(
+                `NSFW model not found at ${modelJsonPath}. Please ensure the model files are present.`
+            );
+        }
+
+        // Create a custom IO handler for loading from local file system
+        const handler = {
+            async load() {
+                // Read model.json
+                const modelTopology = JSON.parse(
+                    fs.readFileSync(modelJsonPath, "utf8")
+                );
+                
+                // Read weight data
+                const weightsManifest = modelTopology.weightsManifest;
+                const weightSpecs = [];
+                const weightData = [];
+                
+                for (const group of weightsManifest) {
+                    for (const path of group.paths) {
+                        const weightPath = `${modelDir}/${path}`;
+                        const buffer = fs.readFileSync(weightPath);
+                        weightData.push(buffer);
+                    }
+                    weightSpecs.push(...group.weights);
+                }
+                
+                // Concatenate all weight buffers
+                const totalSize = weightData.reduce((sum, buf) => sum + buf.length, 0);
+                const concatenated = new Uint8Array(totalSize);
+                let offset = 0;
+                for (const buf of weightData) {
+                    concatenated.set(new Uint8Array(buf), offset);
+                    offset += buf.length;
+                }
+                
+                return {
+                    modelTopology: modelTopology.modelTopology,
+                    weightSpecs: weightSpecs,
+                    weightData: concatenated.buffer,
+                };
+            }
+        };
+        
+        this._nsfwModel = await tf.loadGraphModel(handler);
         console.log("NSFW model initialized");
     }
 
-    async nsfwModelClassify(image) {
-        if (!this._nsfwModel) await this.initNsfwModel();
-        if (!image) return [];
+    async getTopKClasses(logits, topK) {
+        const values = await logits.data();
 
+        const valuesAndIndices = [];
+        for (let i = 0; i < values.length; i++) {
+            valuesAndIndices.push({ value: values[i], index: i });
+        }
+        valuesAndIndices.sort((a, b) => {
+            return b.value - a.value;
+        });
+        const topkValues = new Float32Array(topK);
+        const topkIndices = new Int32Array(topK);
+        for (let i = 0; i < topK; i++) {
+            topkValues[i] = valuesAndIndices[i].value;
+            topkIndices[i] = valuesAndIndices[i].index;
+        }
+
+        const topClassesAndProbs = [];
+        for (let i = 0; i < topkIndices.length; i++) {
+            topClassesAndProbs.push({
+                className: getNsfwClasses()[topkIndices[i]].className,
+                probability: topkValues[i],
+                id: topkIndices[i],
+            });
+        }
+        return topClassesAndProbs;
+    }
+
+    async nsfwModelClassify(tensor, config = NSFW_CONFIG) {
+        if (!this._nsfwModel) await this.initNsfwModel();
+        if (!tensor) return [];
+
+        let resized, expanded;
         try {
-            const predictions = await this._nsfwModel.classify(image);
+            // if size is not 224, resize the image
+            if (
+                tensor.shape[1] !== config.size ||
+                tensor.shape[2] !== config.size
+            ) {
+                resized = tf.image.resizeNearestNeighbor(tensor, [
+                    config.size,
+                    config.size,
+                ]);
+            }
+            // if 3d tensor, add a dimension
+            if (
+                (resized && resized.shape.length === 3) ||
+                tensor.shape.length === 3
+            ) {
+                expanded = tf.expandDims(resized || tensor, 0);
+            }
+            const scalar = tf.scalar(config.tfScalar);
+            const normalized = tf.div(expanded || resized || tensor, scalar);
+            const logits = await this._nsfwModel.predict(normalized);
+
+            const predictions = await this.getTopKClasses(
+                logits,
+                config.topK
+            );
+
+            tf.dispose(
+                [scalar, normalized, logits]
+                    .concat(expanded ? [expanded] : [])
+                    .concat(resized ? [resized] : [])
+            );
+
             return predictions;
         } catch (error) {
             console.error("NSFW Detection Error:", error);
@@ -95,8 +240,11 @@ async function detectImage(imagePath, settings = DEFAULT_SETTINGS) {
 
     console.log("Running detection...");
 
-    // Run NSFW detection
-    const nsfwResult = await detector.nsfwModelClassify(canvas);
+    // Convert to tensor (same as extension: tf.browser.fromPixels)
+    const tensor = tf.browser.fromPixels(canvas);
+
+    // Run NSFW detection (same logic as extension)
+    const nsfwResult = await detector.nsfwModelClassify(tensor);
     console.log(
         "NSFW result:",
         nsfwResult
@@ -104,8 +252,14 @@ async function detectImage(imagePath, settings = DEFAULT_SETTINGS) {
             .join(", ")
     );
 
+    // Use exact same strictness logic as extension
     const strictness = settings.strictness;
-    if (containsNsfw(nsfwResult, strictness)) {
+    const isNsfw = containsNsfw(nsfwResult, strictness);
+
+    // Dispose tensor
+    tf.dispose(tensor);
+
+    if (isNsfw) {
         return { shouldBlur: true, reason: "nsfw", predictions: nsfwResult };
     }
 

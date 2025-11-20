@@ -57,7 +57,7 @@ node index.js input.jpg output.jpg --strictness=0.5 --blur-amount=25
 
 ## How It Works
 
-The CLI tool uses the NSFW detection model from [nsfwjs](https://github.com/infinitered/nsfwjs/) to analyze images for inappropriate content. When detected, it applies a blur filter to the output image.
+The CLI tool uses **the exact same NSFW detection model and logic** as the browser extension to analyze images for inappropriate content. When detected, it applies a blur filter to the output image. The model is loaded from the local `src/assets/models/nsfwjs/` directory, ensuring 100% consistency with the extension's behavior.
 
 ### Detection Categories
 
@@ -74,11 +74,13 @@ Safe content categories (not blurred):
 
 ## Features
 
--   **Same detection logic** as the HaramBlur browser extension
+-   **100% identical detection logic** to the HaramBlur browser extension
+-   **Same NSFW model** loaded from local files
+-   **Same strictness algorithm** with exact threshold calculations
 -   **Configurable strictness** to match your preferences
 -   **Adjustable blur intensity**
 -   **Fast processing** using TensorFlow.js
--   **Offline capable** (after first model download)
+-   **Fully offline** - no external model downloads needed
 
 ## Requirements
 
@@ -120,10 +122,12 @@ node batch-example.js ./input-directory ./output-directory 0.5
 
 ## Notes
 
--   On first run, the tool will download the NSFW detection model (approximately 3MB)
--   The model is cached locally for subsequent runs
+-   The model is loaded from `src/assets/models/nsfwjs/` directory
+-   Uses the exact same model files as the browser extension
+-   No external downloads needed - fully offline
 -   Supported image formats: PNG, JPEG, JPG
 -   The tool preserves the original image and creates a new output file
+-   Detection thresholds are calculated using the same formula as the extension
 
 ## Privacy
 

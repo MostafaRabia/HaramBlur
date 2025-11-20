@@ -22,9 +22,11 @@ You can configure the type of detection you want and the amount of blur, the lev
 ### CLI Tool (New!)
 
 -   Process images from the command line
--   Uses the same detection models as the extension
+-   **100% identical detection logic** to the browser extension
+-   Uses the exact same NSFW model files
 -   Adjustable strictness and blur amount
 -   Perfect for batch processing or automation
+-   Fully offline - no external downloads
 -   See [CLI-README.md](CLI-README.md) for details
 
 ## How it Works

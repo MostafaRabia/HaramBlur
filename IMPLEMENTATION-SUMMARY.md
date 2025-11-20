@@ -36,16 +36,19 @@ Translation: Convert the project from a Google Chrome extension to something tha
 
 ### Technology Stack
 
--   **@tensorflow/tfjs**: Core TensorFlow.js library for browser
--   **nsfwjs**: NSFW detection model (same as extension)
+-   **@tensorflow/tfjs**: Core TensorFlow.js library
+-   **Local NSFW model**: Loads the exact same model files from `src/assets/models/nsfwjs/`
 -   **canvas**: Node.js canvas implementation for image processing
--   **sharp**: Image manipulation library (optional)
 
 ### Key Design Decisions
 
-1. **Used nsfwjs directly**: Instead of implementing a custom NSFW classifier, we use the nsfwjs library which provides the same models used in the browser extension.
+1. **100% identical detection logic**: The CLI now uses the exact same NSFW model files and detection logic as the browser extension, including:
+   - Same `getNsfwClasses()` function with class-specific thresholds
+   - Same `containsNsfw()` logic comparing NSFW delta vs SFW delta
+   - Same tensor processing (resize to 224x224, normalize by dividing by 255)
+   - Same topK classification approach
 
-2. **Simplified face detection**: The initial implementation focuses on NSFW detection. Face detection using Human.js was not included in the first version due to tfjs-node installation issues, but can be added in future updates.
+2. **Local model loading**: Created a custom IO handler to load the model directly from the filesystem, ensuring offline capability and 100% consistency with the extension.
 
 3. **Browser-compatible TensorFlow**: Used @tensorflow/tfjs instead of @tensorflow/tfjs-node to avoid native dependency issues while maintaining functionality.
 
