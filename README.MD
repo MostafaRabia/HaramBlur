@@ -1,6 +1,6 @@
 # HaramBlur Extension
 
-HaramBlur is a browser extension that allows you to navigate the web with respect for your Islamic values, privacy and reduce browsing distractions.
+HaramBlur is a browser extension and CLI tool that allows you to navigate the web and process images with respect for your Islamic values, privacy and reduce browsing distractions.
 
 HaramBlur utilizes face detection and NSFW content detection and provides controls that allow you to uphold the Islamic gaze protection principle and tailor your online experience by automatically blurring images and videos that contain unwanted or impermissible content.
 
@@ -10,6 +10,8 @@ You can configure the type of detection you want and the amount of blur, the lev
 
 ## Features
 
+### Browser Extension
+
 -   Works on images and videos that contain unwanted or impermissible content
 -   Works on most (if not all) websites and social media platforms
 -   Configurable detection settings to tailor your browsing experience
@@ -17,39 +19,49 @@ You can configure the type of detection you want and the amount of blur, the lev
 -   Customizable hover to unblur feature
 -   Decent speed and accuracy (continously improved)
 
+### CLI Tool (New!)
+
+-   Process images from the command line
+-   Uses the same detection models as the extension
+-   Adjustable strictness and blur amount
+-   Perfect for batch processing or automation
+-   See [CLI-README.md](CLI-README.md) for details
+
 ## How it Works
 
 HaramBlur currently used face detection and recognition features provided by [Human library](https://github.com/vladmandic/human) to detect faces and blur them based on the user settings and preferences. It also uses NSFW detection provided by [nsfwjs](https://github.com/infinitered/nsfwjs/) to further improve the accuracy. You can configure the type of detection you want and the amount of blur, hover to unblur, or turn the extension on and off via the interactive pop-up.
 
 # Installation Guide
 
-## Option 1: Using the Plugin from the extensions store
+## For Browser Extension
+
+### Option 1: Using the Plugin from the extensions store
 
 1. Visit the [Haramblur extension on the Chrome Web Store](https://chrome.google.com/webstore/detail/haramblur/pbcoegikffnadpahojjhgdladmmddeji) or the [Firefox Add-ons Store](https://addons.mozilla.org/addon/haramblur/)
 
 2. Follow the installation instructions on the page.
 
-## Option 2: Compiling it On Your Own
+### Option 2: Compiling it On Your Own
 
 If you want to compile the extension on your own, follow these steps:
 
-### Step 1: Clone the Repository
+#### Step 1: Clone the Repository
 
 Clone the HaramBlur repository to your local machine:
 
-#### Chromium
+**Chromium:**
 
 ```bash
 git clone https://github.com/alganzory/HaramBlur.git
 ```
 
-### Firefox
+**Firefox:**
 
 ```bash
 git clone -b firefox-main --single-branch https://github.com/alganzory/HaramBlur.git
 ```
 
-### Step 2: Install Dependencies
+#### Step 2: Install Dependencies
 
 Navigate to the project directory and install the necessary dependencies:
 
@@ -57,18 +69,18 @@ Navigate to the project directory and install the necessary dependencies:
 npm install
 ```
 
-### Step 3: Code Your Magic
+#### Step 3: Code Your Magic
 
 Make the necessary modifications or enhancements to the code.
 
-### Step 4: Build the Extension
+#### Step 4: Build the Extension
 
 -   Build the extension by running:
     ```bash
     npm run build
     ```
 
-### Step 5: Generate a Release (Optional)
+#### Step 5: Generate a Release (Optional)
 
 Generate a release zip file to be uploaded to the browser/store:
 
@@ -76,18 +88,36 @@ Generate a release zip file to be uploaded to the browser/store:
 npm run release
 ```
 
-### Load the extension in Chromium browsers
+#### Load the extension in Chromium browsers
 
 -   Go to `chrome://extensions/`.
 -   Enable "Developer mode".
 -   Click "Load unpacked" and select the project folder.
 
-### Load the extension in Firefox
+#### Load the extension in Firefox
 
 -   Go to `about:addons`
 -   Press the gear icon.
 -   Click "Install Add-on from file"
 -   Select the zip file that you generated in Step 5.
+
+## For CLI Tool
+
+To use the command-line tool:
+
+```bash
+# Clone the repository
+git clone https://github.com/MostafaRabia/HaramBlur.git
+cd HaramBlur
+
+# Install dependencies
+npm install
+
+# Run the CLI
+node index.js input.jpg output.jpg
+```
+
+For more details and options, see [CLI-README.md](CLI-README.md).
 
 ## Improvements
 
