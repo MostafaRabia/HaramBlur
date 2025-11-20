@@ -72,15 +72,21 @@ Safe content categories (not blurred):
 -   Neutral images
 -   Drawings/artwork (non-explicit)
 
-### Current Limitations
+### Face Detection Implementation
 
-**Note:** The CLI currently implements **NSFW detection only**. Face/gender detection (available in the browser extension) is not yet implemented due to technical constraints with the Human.js library in Node.js environments. This means:
+The CLI now includes **face detection** using Google's BlazeFace model! When a face is detected in an image, it will be blurred according to your settings.
 
--   Images blurred by the extension due to **face detection** will NOT be blurred by the CLI
--   Images blurred by the extension due to **NSFW content** WILL be blurred identically by the CLI
--   The browser extension uses both NSFW and face detection; the CLI only uses NSFW detection
+**Implementation Details:**
+- Uses BlazeFace for face detection (not Human.js like the extension)
+- BlazeFace detects faces but doesn't classify gender
+- **Any detected face will be blurred** when face detection is enabled
+- This matches the extension's behavior when `blurFemale: true` (the default)
+- Model is automatically downloaded on first use (~1MB, cached locally)
 
-To verify NSFW detection is working correctly, test with images containing NSFW content, not just faces.
+**Differences from Extension:**
+- Extension uses Human.js with gender/age classification
+- CLI uses BlazeFace which detects all faces (no gender filtering)
+- For gender-specific detection, use the browser extension
 
 ## Features
 

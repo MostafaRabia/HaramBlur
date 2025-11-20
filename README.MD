@@ -23,11 +23,11 @@ You can configure the type of detection you want and the amount of blur, the lev
 
 -   Process images from the command line
 -   **100% identical NSFW detection logic** to the browser extension
+-   **Face detection included** using Google BlazeFace
 -   Uses the exact same NSFW model files
 -   Adjustable strictness and blur amount
 -   Perfect for batch processing or automation
--   Fully offline - no external downloads
--   **Note:** Currently implements NSFW detection only (face detection not yet available)
+-   Model downloads on first use, then cached locally
 -   See [CLI-README.md](CLI-README.md) for details
 
 ## How it Works

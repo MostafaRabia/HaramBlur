@@ -14,8 +14,10 @@ const { createCanvas, loadImage, Canvas, Image } = require("canvas");
 global.HTMLCanvasElement = Canvas;
 global.HTMLImageElement = Image;
 global.ImageData = Canvas.ImageData || function () {};
+global.fetch = require("node-fetch");
 
 const tf = require("@tensorflow/tfjs");
+const blazeface = require("@tensorflow-models/blazeface");
 
 const NSFW_CONFIG = {
     size: 224,
@@ -89,6 +91,14 @@ const containsNsfw = (nsfwDetections, strictness) => {
 class Detector {
     constructor() {
         this._nsfwModel = null;
+        this._faceModel = null;
+    }
+
+    async initFaceModel() {
+        if (this._faceModel) return;
+        console.log("Initializing face detection model...");
+        this._faceModel = await blazeface.load();
+        console.log("Face detection model initialized");
     }
 
     async initNsfwModel() {
@@ -256,11 +266,39 @@ async function detectImage(imagePath, settings = DEFAULT_SETTINGS) {
     const strictness = settings.strictness;
     const isNsfw = containsNsfw(nsfwResult, strictness);
 
+    if (isNsfw) {
+        tf.dispose(tensor);
+        return { shouldBlur: true, reason: "nsfw", predictions: nsfwResult };
+    }
+
+    // Check if we should detect faces (same logic as extension)
+    const shouldDetectFaces = settings.blurMale || settings.blurFemale;
+    if (!shouldDetectFaces) {
+        tf.dispose(tensor);
+        return { shouldBlur: false, reason: "clear", predictions: nsfwResult };
+    }
+
+    // Run face detection
+    await detector.initFaceModel();
+    console.log("Running face detection...");
+    
+    const faceDetections = await detector._faceModel.estimateFaces(canvas, false);
+    const faceCount = faceDetections.length;
+    console.log(`Face detection result: ${faceCount} face(s) detected`);
+    
     // Dispose tensor
     tf.dispose(tensor);
 
-    if (isNsfw) {
-        return { shouldBlur: true, reason: "nsfw", predictions: nsfwResult };
+    // For now, blur any detected face (extension's default is blurFemale: true)
+    // Note: BlazeFace doesn't do gender classification, so we blur all faces
+    // This matches the extension behavior when blurFemale is enabled
+    if (faceCount > 0) {
+        return { 
+            shouldBlur: true, 
+            reason: "face", 
+            predictions: nsfwResult, 
+            faces: faceDetections 
+        };
     }
 
     return { shouldBlur: false, reason: "clear", predictions: nsfwResult };
