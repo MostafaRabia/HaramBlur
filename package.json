@@ -1,5 +1,13 @@
 {
+    "name": "haramblur",
+    "version": "0.2.6",
+    "description": "Protect your privacy and uphold Islamic values by auto detecting & blurring images and videos of unwanted or impermissible content",
+    "main": "index.js",
+    "bin": {
+        "haramblur": "./index.js"
+    },
     "scripts": {
+        "cli": "node index.js",
         "build": "vite build",
         "dev": "vite build --watch",
         "release": "bestzip extension.zip dist manifest.json src/assets src/background.js src/constants.js src/translations.js src/popup.html src/popup.js src/offscreen.html src/offscreen.js src/modules/* tfjs/*",
@@ -14,5 +22,17 @@
     },
     "lint-staged": {
         "**/*": "prettier --write --ignore-unknown"
+    },
+    "dependencies": {
+        "@tensorflow-models/blazeface": "^0.1.0",
+        "@tensorflow/tfjs": "^4.20.0",
+        "@tensorflow/tfjs-core": "^4.20.0",
+        "@tensorflow/tfjs-node": "^4.20.0",
+        "@vladmandic/human": "^3.3.6",
+        "canvas": "^3.2.0",
+        "node-fetch": "^2.7.0",
+        "nsfwjs": "^4.2.1",
+        "sharp": "^0.34.5",
+        "stackblur-canvas": "^2.7.0"
     }
 }

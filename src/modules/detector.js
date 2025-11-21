@@ -121,12 +121,12 @@ class Detector {
         return new Promise((resolve, reject) => {
             const promise = needToResize
                 ? this._human.detect(tensor, {
-                      filter: {
-                          enabled: true,
-                          width: needToResize?.newWidth,
-                          height: needToResize?.newHeight,
-                      },
-                  })
+                    filter: {
+                        enabled: true,
+                        width: needToResize?.newWidth,
+                        height: needToResize?.newHeight,
+                    },
+                })
                 : this._human.detect(tensor);
             promise
                 .then((res) => {
