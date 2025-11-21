@@ -314,18 +314,27 @@ async function applyBlur(inputPath, outputPath, blurAmount = 20) {
     const tempCanvas = createCanvas(image.width, image.height);
     const tempCtx = tempCanvas.getContext("2d");
     tempCtx.drawImage(image, 0, 0);
-    const inputImageData = tempCtx.getImageData(0, 0, image.width, image.height);
+    const inputImageData = tempCtx.getImageData(
+        0,
+        0,
+        image.width,
+        image.height
+    );
 
     // Convert image data to tensor manually (avoiding tf.browser.fromPixels which doesn't work in Node)
     const imageTensor = tf.tidy(() => {
         // Extract RGB values from RGBA data
-        const pixelData = new Uint8Array(image.width * image.height * 3);
+        const pixelData = new Float32Array(image.width * image.height * 3);
         for (let i = 0; i < inputImageData.data.length / 4; i++) {
             pixelData[i * 3] = inputImageData.data[i * 4]; // R
             pixelData[i * 3 + 1] = inputImageData.data[i * 4 + 1]; // G
             pixelData[i * 3 + 2] = inputImageData.data[i * 4 + 2]; // B
         }
-        return tf.tensor3d(pixelData, [image.height, image.width, 3]);
+        return tf.tensor3d(
+            pixelData,
+            [image.height, image.width, 3],
+            "float32"
+        );
     });
 
     // Convert blur amount (pixels) to kernel size
