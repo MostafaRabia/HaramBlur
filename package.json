@@ -25,7 +25,9 @@
     },
     "dependencies": {
         "@tensorflow-models/blazeface": "^0.1.0",
-        "@tensorflow/tfjs": "^4.22.0",
+        "@tensorflow/tfjs": "^4.20.0",
+        "@tensorflow/tfjs-core": "^4.20.0",
+        "@tensorflow/tfjs-node": "^4.20.0",
         "@vladmandic/human": "^3.3.6",
         "canvas": "^3.2.0",
         "node-fetch": "^2.7.0",
