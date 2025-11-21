@@ -9,6 +9,7 @@
 const fs = require("fs");
 const path = require("path");
 const { createCanvas, loadImage, Canvas, Image } = require("canvas");
+const { canvasRGBA } = require("stackblur-canvas");
 
 // Setup tf globals for browser compatibility
 global.HTMLCanvasElement = Canvas;
@@ -310,97 +311,14 @@ async function detectImage(imagePath, settings = DEFAULT_SETTINGS) {
 async function applyBlur(inputPath, outputPath, blurAmount = 20) {
     const image = await loadImage(inputPath);
 
-    // Create canvas and get image data
-    const tempCanvas = createCanvas(image.width, image.height);
-    const tempCtx = tempCanvas.getContext("2d");
-    tempCtx.drawImage(image, 0, 0);
-    const inputImageData = tempCtx.getImageData(
-        0,
-        0,
-        image.width,
-        image.height
-    );
-
-    // Convert image data to tensor manually (avoiding tf.browser.fromPixels which doesn't work in Node)
-    const imageTensor = tf.tidy(() => {
-        // Extract RGB values from RGBA data
-        const pixelData = new Float32Array(image.width * image.height * 3);
-        for (let i = 0; i < inputImageData.data.length / 4; i++) {
-            pixelData[i * 3] = inputImageData.data[i * 4]; // R
-            pixelData[i * 3 + 1] = inputImageData.data[i * 4 + 1]; // G
-            pixelData[i * 3 + 2] = inputImageData.data[i * 4 + 2]; // B
-        }
-        return tf.tensor3d(
-            pixelData,
-            [image.height, image.width, 3],
-            "float32"
-        );
-    });
-
-    // Convert blur amount (pixels) to kernel size
-    // Typical range: blurAmount 20px -> kernel size ~20
-    const kernelSize = Math.max(3, Math.floor(blurAmount)) | 1; // Ensure odd number
-
-    // Create Gaussian blur kernel
-    const sigma = kernelSize / 3;
-    const kernel = tf.tidy(() => {
-        const size = kernelSize;
-        const center = Math.floor(size / 2);
-        const kernel2d = [];
-        let sum = 0;
-
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const dx = x - center;
-                const dy = y - center;
-                const value = Math.exp(
-                    -(dx * dx + dy * dy) / (2 * sigma * sigma)
-                );
-                kernel2d.push(value);
-                sum += value;
-            }
-        }
-
-        // Normalize
-        const normalized = kernel2d.map((v) => v / sum);
-        return tf.tensor2d(normalized, [size, size]);
-    });
-
-    // Apply blur using depthwise convolution
-    const blurred = tf.tidy(() => {
-        // Expand dims for conv2d: [height, width, channels] -> [1, height, width, channels]
-        const expanded = imageTensor.expandDims(0);
-
-        // Create 3-channel kernel [kernelHeight, kernelWidth, inChannels, channelMultiplier]
-        const kernel3d = tf.stack([kernel, kernel, kernel], 2).expandDims(3);
-
-        // Apply convolution
-        const result = tf.depthwiseConv2d(expanded, kernel3d, [1, 1], "same");
-
-        // Remove batch dimension and clip values
-        return result.squeeze([0]).clipByValue(0, 255);
-    });
-
-    // Convert back to canvas
+    // Create canvas with image
     const canvas = createCanvas(image.width, image.height);
     const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
 
-    // Create image data from tensor
-    const blurredData = await blurred.data();
-    const imageData = ctx.createImageData(image.width, image.height);
-
-    // Convert RGB tensor data back to RGBA image data
-    for (let i = 0; i < image.width * image.height; i++) {
-        imageData.data[i * 4] = blurredData[i * 3]; // R
-        imageData.data[i * 4 + 1] = blurredData[i * 3 + 1]; // G
-        imageData.data[i * 4 + 2] = blurredData[i * 3 + 2]; // B
-        imageData.data[i * 4 + 3] = 255; // A (full opacity)
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-
-    // Clean up tensors
-    tf.dispose([imageTensor, kernel, blurred]);
+    // Apply stackblur - fast and efficient blur algorithm
+    // stackblur uses a radius parameter (matches CSS blur px value well)
+    canvasRGBA(canvas, 0, 0, image.width, image.height, blurAmount);
 
     // Save output - match input format
     const ext = path.extname(outputPath).toLowerCase();
