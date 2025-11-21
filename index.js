@@ -109,7 +109,7 @@ class Detector {
             "src/assets/models/nsfwjs/model.json"
         );
         const modelDir = path.dirname(modelJsonPath);
-        
+
         if (!fs.existsSync(modelJsonPath)) {
             throw new Error(
                 `NSFW model not found at ${modelJsonPath}. Please ensure the model files are present.`
@@ -123,12 +123,12 @@ class Detector {
                 const modelTopology = JSON.parse(
                     fs.readFileSync(modelJsonPath, "utf8")
                 );
-                
+
                 // Read weight data
                 const weightsManifest = modelTopology.weightsManifest;
                 const weightSpecs = [];
                 const weightData = [];
-                
+
                 for (const group of weightsManifest) {
                     for (const path of group.paths) {
                         const weightPath = `${modelDir}/${path}`;
@@ -137,24 +137,27 @@ class Detector {
                     }
                     weightSpecs.push(...group.weights);
                 }
-                
+
                 // Concatenate all weight buffers
-                const totalSize = weightData.reduce((sum, buf) => sum + buf.length, 0);
+                const totalSize = weightData.reduce(
+                    (sum, buf) => sum + buf.length,
+                    0
+                );
                 const concatenated = new Uint8Array(totalSize);
                 let offset = 0;
                 for (const buf of weightData) {
                     concatenated.set(new Uint8Array(buf), offset);
                     offset += buf.length;
                 }
-                
+
                 return {
                     modelTopology: modelTopology.modelTopology,
                     weightSpecs: weightSpecs,
                     weightData: concatenated.buffer,
                 };
-            }
+            },
         };
-        
+
         this._nsfwModel = await tf.loadGraphModel(handler);
         console.log("NSFW model initialized");
     }
@@ -214,10 +217,7 @@ class Detector {
             const normalized = tf.div(expanded || resized || tensor, scalar);
             const logits = await this._nsfwModel.predict(normalized);
 
-            const predictions = await this.getTopKClasses(
-                logits,
-                config.topK
-            );
+            const predictions = await this.getTopKClasses(logits, config.topK);
 
             tf.dispose(
                 [scalar, normalized, logits]
@@ -281,11 +281,14 @@ async function detectImage(imagePath, settings = DEFAULT_SETTINGS) {
     // Run face detection
     await detector.initFaceModel();
     console.log("Running face detection...");
-    
-    const faceDetections = await detector._faceModel.estimateFaces(canvas, false);
+
+    const faceDetections = await detector._faceModel.estimateFaces(
+        canvas,
+        false
+    );
     const faceCount = faceDetections.length;
     console.log(`Face detection result: ${faceCount} face(s) detected`);
-    
+
     // Dispose tensor
     tf.dispose(tensor);
 
@@ -293,11 +296,11 @@ async function detectImage(imagePath, settings = DEFAULT_SETTINGS) {
     // Note: BlazeFace doesn't do gender classification, so we blur all faces
     // This matches the extension behavior when blurFemale is enabled
     if (faceCount > 0) {
-        return { 
-            shouldBlur: true, 
-            reason: "face", 
-            predictions: nsfwResult, 
-            faces: faceDetections 
+        return {
+            shouldBlur: true,
+            reason: "face",
+            predictions: nsfwResult,
+            faces: faceDetections,
         };
     }
 
@@ -306,18 +309,85 @@ async function detectImage(imagePath, settings = DEFAULT_SETTINGS) {
 
 async function applyBlur(inputPath, outputPath, blurAmount = 20) {
     const image = await loadImage(inputPath);
+
+    // Use TensorFlow for efficient blur
+    const imageTensor = tf.browser.fromPixels(image);
+
+    // Convert blur amount (pixels) to kernel size
+    // Typical range: blurAmount 20px -> kernel size ~20
+    const kernelSize = Math.max(3, Math.floor(blurAmount)) | 1; // Ensure odd number
+
+    // Create Gaussian blur kernel
+    const sigma = kernelSize / 3;
+    const kernel = tf.tidy(() => {
+        const size = kernelSize;
+        const center = Math.floor(size / 2);
+        const kernel2d = [];
+        let sum = 0;
+
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                const dx = x - center;
+                const dy = y - center;
+                const value = Math.exp(
+                    -(dx * dx + dy * dy) / (2 * sigma * sigma)
+                );
+                kernel2d.push(value);
+                sum += value;
+            }
+        }
+
+        // Normalize
+        const normalized = kernel2d.map((v) => v / sum);
+        return tf.tensor2d(normalized, [size, size]);
+    });
+
+    // Apply blur using depthwise convolution
+    const blurred = tf.tidy(() => {
+        // Expand dims for conv2d: [height, width, channels] -> [1, height, width, channels]
+        const expanded = imageTensor.expandDims(0);
+
+        // Create 3-channel kernel [kernelHeight, kernelWidth, inChannels, channelMultiplier]
+        const kernel3d = tf.stack([kernel, kernel, kernel], 2).expandDims(3);
+
+        // Apply convolution
+        const result = tf.depthwiseConv2d(expanded, kernel3d, [1, 1], "same");
+
+        // Remove batch dimension and clip values
+        return result.squeeze([0]).clipByValue(0, 255);
+    });
+
+    // Convert back to canvas
     const canvas = createCanvas(image.width, image.height);
     const ctx = canvas.getContext("2d");
 
-    // Draw image
-    ctx.drawImage(image, 0, 0);
+    // Create image data from tensor
+    const blurredData = await blurred.data();
+    const imageData = ctx.createImageData(image.width, image.height);
 
-    // Apply blur filter
-    ctx.filter = `blur(${blurAmount}px)`;
-    ctx.drawImage(image, 0, 0);
+    for (let i = 0; i < blurredData.length; i++) {
+        imageData.data[i] = blurredData[i];
+    }
 
-    // Save output
-    const buffer = canvas.toBuffer("image/png");
+    // Handle alpha channel
+    for (let i = 3; i < imageData.data.length; i += 4) {
+        imageData.data[i] = 255; // Set full opacity
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Clean up tensors
+    tf.dispose([imageTensor, kernel, blurred]);
+
+    // Save output - match input format
+    const ext = path.extname(outputPath).toLowerCase();
+    let buffer;
+    if (ext === ".jpg" || ext === ".jpeg") {
+        buffer = canvas.toBuffer("image/jpeg", { quality: 0.95 });
+    } else {
+        buffer = canvas.toBuffer("image/png", { compressionLevel: 6 });
+    }
+
     fs.writeFileSync(outputPath, buffer);
     console.log(`Blurred image saved to: ${outputPath}`);
 }
