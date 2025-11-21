@@ -310,8 +310,23 @@ async function detectImage(imagePath, settings = DEFAULT_SETTINGS) {
 async function applyBlur(inputPath, outputPath, blurAmount = 20) {
     const image = await loadImage(inputPath);
 
-    // Use TensorFlow for efficient blur
-    const imageTensor = tf.browser.fromPixels(image);
+    // Create canvas and get image data
+    const tempCanvas = createCanvas(image.width, image.height);
+    const tempCtx = tempCanvas.getContext("2d");
+    tempCtx.drawImage(image, 0, 0);
+    const inputImageData = tempCtx.getImageData(0, 0, image.width, image.height);
+
+    // Convert image data to tensor manually (avoiding tf.browser.fromPixels which doesn't work in Node)
+    const imageTensor = tf.tidy(() => {
+        // Extract RGB values from RGBA data
+        const pixelData = new Uint8Array(image.width * image.height * 3);
+        for (let i = 0; i < inputImageData.data.length / 4; i++) {
+            pixelData[i * 3] = inputImageData.data[i * 4]; // R
+            pixelData[i * 3 + 1] = inputImageData.data[i * 4 + 1]; // G
+            pixelData[i * 3 + 2] = inputImageData.data[i * 4 + 2]; // B
+        }
+        return tf.tensor3d(pixelData, [image.height, image.width, 3]);
+    });
 
     // Convert blur amount (pixels) to kernel size
     // Typical range: blurAmount 20px -> kernel size ~20
@@ -365,13 +380,12 @@ async function applyBlur(inputPath, outputPath, blurAmount = 20) {
     const blurredData = await blurred.data();
     const imageData = ctx.createImageData(image.width, image.height);
 
-    for (let i = 0; i < blurredData.length; i++) {
-        imageData.data[i] = blurredData[i];
-    }
-
-    // Handle alpha channel
-    for (let i = 3; i < imageData.data.length; i += 4) {
-        imageData.data[i] = 255; // Set full opacity
+    // Convert RGB tensor data back to RGBA image data
+    for (let i = 0; i < image.width * image.height; i++) {
+        imageData.data[i * 4] = blurredData[i * 3]; // R
+        imageData.data[i * 4 + 1] = blurredData[i * 3 + 1]; // G
+        imageData.data[i * 4 + 2] = blurredData[i * 3 + 2]; // B
+        imageData.data[i * 4 + 3] = 255; // A (full opacity)
     }
 
     ctx.putImageData(imageData, 0, 0);
